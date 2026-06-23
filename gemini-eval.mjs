@@ -89,6 +89,7 @@ if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
 let jdText = '';
 let modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 let saveReport = true;
+let metadataFile = '';
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--file' && args[i + 1]) {
@@ -100,6 +101,8 @@ for (let i = 0; i < args.length; i++) {
     jdText = readFileSync(filePath, 'utf-8').trim();
   } else if (args[i] === '--model' && args[i + 1]) {
     modelName = args[++i];
+  } else if (args[i] === '--metadata-file' && args[i + 1]) {
+    metadataFile = args[++i];
   } else if (args[i] === '--no-save') {
     saveReport = false;
   } else if (!args[i].startsWith('--')) {
@@ -230,6 +233,19 @@ try {
     { text: `\n\nJOB DESCRIPTION TO EVALUATE:\n\n${jdText}` },
   ]);
   evaluationText = result.response.text();
+  const usage = result.response.usageMetadata;
+  if (metadataFile && usage) {
+    try {
+      const usageJson = {
+        prompt_tokens: usage.promptTokenCount || 0,
+        completion_tokens: usage.candidatesTokenCount || 0,
+        total_tokens: usage.totalTokenCount || 0
+      };
+      writeFileSync(metadataFile, JSON.stringify(usageJson, null, 2), 'utf-8');
+    } catch (err) {
+      console.warn(`⚠️  Could not write metadata file: ${err.message}`);
+    }
+  }
 } catch (err) {
   console.error('❌  Gemini API error:', err.message);
   if (err.message?.includes('API_KEY')) {

@@ -338,13 +338,6 @@ tracked_companies:
     notes: "STT/TTS APIs."
     enabled: true
 
-  - name: Vapi
-    careers_url: https://jobs.ashbyhq.com/vapi
-    scan_method: websearch
-    scan_query: 'site:jobs.ashbyhq.com/vapi'
-    notes: "Voice AI infrastructure."
-    enabled: true
-
   - name: Bland AI
     careers_url: https://jobs.ashbyhq.com/bland
     scan_method: websearch
@@ -373,12 +366,6 @@ tracked_companies:
     notes: "AI SDK, v0.dev. Frontend AI tooling."
     enabled: true
 
-  - name: Temporal
-    careers_url: https://job-boards.greenhouse.io/temporal
-    api: https://boards-api.greenhouse.io/v1/boards/temporal/jobs
-    notes: "Workflow orchestration."
-    enabled: true
-
   - name: Arize AI
     careers_url: https://job-boards.greenhouse.io/arizeai
     api: https://boards-api.greenhouse.io/v1/boards/arizeai/jobs
@@ -398,13 +385,6 @@ tracked_companies:
     enabled: true
 
   # -- Contact Center AI & CX --
-
-  - name: Ada
-    careers_url: https://job-boards.greenhouse.io/ada
-    scan_method: websearch
-    scan_query: '"ada.cx" OR "ada" "AI" "Solutions" OR "Engineer" site:jobs.ashbyhq.com OR site:job-boards.greenhouse.io'
-    notes: "Toronto + remote. AI customer service."
-    enabled: true
 
   - name: LivePerson
     careers_url: https://liveperson.com/company/careers
@@ -480,13 +460,6 @@ tracked_companies:
     notes: "Berlin. LLMOps / observability."
     enabled: true
 
-  - name: Lindy
-    careers_url: https://jobs.ashbyhq.com/lindy
-    scan_method: websearch
-    scan_query: '"lindy.ai" "AI" "Forward Deployed" OR "Solutions" site:jobs.ashbyhq.com'
-    notes: "AI agent management platform."
-    enabled: true
-
   - name: Cognigy
     careers_url: https://careers.cognigy.com
     scan_method: websearch
@@ -553,11 +526,6 @@ tracked_companies:
     notes: "Paris. European AI lab."
     enabled: true
 
-  - name: Weights & Biases
-    careers_url: https://jobs.lever.co/wandb
-    notes: "MLOps platform."
-    enabled: true
-
   - name: Palantir
     careers_url: https://jobs.lever.co/palantir
     notes: "FDE roles. Mostly US/London."
@@ -593,11 +561,6 @@ tracked_companies:
     notes: "Ho Chi Minh City. AI agents for supply chain and logistics workflows."
     enabled: true
 
-  - name: Sanctuary AI
-    careers_url: https://jobs.lever.co/sanctuary
-    notes: "Vancouver. Humanoid robotics and embodied AI."
-    enabled: true
-
   - name: Semios
     careers_url: https://apply.workable.com/semios/
     scan_method: websearch
@@ -607,48 +570,12 @@ tracked_companies:
 
   # -- European tech (EMEA-friendly) --
 
-  - name: Factorial
-    careers_url: https://job-boards.greenhouse.io/factorial
-    scan_method: websearch
-    scan_query: 'site:jobs.greenhouse.io/factorial'
-    notes: "Barcelona. HR SaaS unicorn."
-    enabled: true
-
   - name: Attio
     careers_url: https://jobs.ashbyhq.com/attio
     scan_method: websearch
     scan_query: 'site:attio.com/careers OR site:jobs.ashbyhq.com/attio'
     notes: "Remote EU. AI-native CRM. Series B $52M."
     enabled: true
-
-  - name: Tinybird
-    careers_url: https://jobs.ashbyhq.com/tinybird
-    scan_method: websearch
-    scan_query: 'site:tinybird.co/careers OR site:jobs.ashbyhq.com/tinybird'
-    notes: "Remote. Real-time data platform."
-    enabled: true
-
-  - name: Clarity AI
-    careers_url: https://jobs.lever.co/clarity-ai
-    scan_method: websearch
-    scan_query: 'site:clarity.ai/careers OR site:jobs.lever.co/clarity-ai'
-    notes: "Madrid/Remote. Sustainability analytics with AI."
-    enabled: true
-
-  - name: Travelperk
-    careers_url: https://jobs.ashbyhq.com/travelperk
-    scan_method: websearch
-    scan_query: 'site:jobs.ashbyhq.com/travelperk'
-    notes: "Barcelona. Business travel unicorn."
-    enabled: true
-
-  # -- DACH & European AI ecosystem --
-  # All entries below have been verified against the Greenhouse / Ashby /
-  # Lever / Workable APIs or live job boards. Greenhouse boards expose a
-  # JSON API at https://boards-api.greenhouse.io/v1/boards/{slug}/jobs which
-  # the scanner can hit directly via the api: field.
-
-  # -- DACH AI labs & frontier model providers --
 
   - name: Aleph Alpha
     careers_url: https://jobs.ashbyhq.com/AlephAlpha
@@ -728,13 +655,6 @@ tracked_companies:
     enabled: true
 
   # -- DACH logistics / mobility --
-
-  - name: Forto
-    careers_url: https://jobs.lever.co/forto
-    notes: "Berlin DE. Digital freight forwarder, product & data roles, German + English."
-    enabled: true
-
-  # -- Switzerland / Austria AI --
 
   - name: Lakera
     careers_url: https://jobs.ashbyhq.com/lakera.ai
@@ -845,13 +765,6 @@ tracked_companies:
     notes: "Stockholm SE / NYC / London. Audio platform, large ML/personalization org."
     enabled: true
 
-  - name: Vinted
-    careers_url: https://jobs.lever.co/vinted
-    notes: "Vilnius LT / Berlin. C2C marketplace unicorn, data science & ML roles."
-    enabled: true
-
-  # -- Iberia AI --
-
   - name: Amplemarket
     careers_url: https://job-boards.greenhouse.io/amplemarket
     api: https://boards-api.greenhouse.io/v1/boards/amplemarket/jobs
@@ -872,12 +785,6 @@ tracked_companies:
     scan_method: websearch
     scan_query: 'site:jobs.ashbyhq.com/claylabs "AI" OR "Developer Experience" OR "Growth" OR "Engineer"'
     notes: "AI-native GTM and workflow automation platform."
-    enabled: true
-
-  - name: Runway
-    careers_url: https://job-boards.greenhouse.io/runwayml
-    api: https://boards-api.greenhouse.io/v1/boards/runwayml/jobs
-    notes: "Generative AI video and creative tooling platform."
     enabled: true
 
   - name: Hightouch
@@ -927,13 +834,6 @@ tracked_companies:
     careers_url: https://job-boards.greenhouse.io/planetscale
     api: https://boards-api.greenhouse.io/v1/boards/planetscale/jobs
     notes: "Serverless MySQL platform. Customer Engineering, Engineering, Sales."
-    enabled: true
-
-  - name: Zep AI
-    careers_url: https://www.getzep.com/careers
-    scan_method: websearch
-    scan_query: '"Zep" "Forward Deployed" OR "Developer Relations" OR "Founding" site:workatastartup.com OR site:getzep.com'
-    notes: "Context engineering platform for AI agents. YC W24. Lead FDE + DevRel Lead roles. US-only currently."
     enabled: true
 
   - name: Maxim AI
