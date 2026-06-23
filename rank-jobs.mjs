@@ -121,20 +121,97 @@ The JSON array should contain objects with this schema:
 ]
 `;
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: modelName,
-    generationConfig: {
-      responseMimeType: "application/json"
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  async function callLLM(systemPrompt, userPrompt, jsonMode = true) {
+    if (apiKey) {
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const modelOptions = { model: modelName };
+        if (jsonMode) {
+          modelOptions.generationConfig = { responseMimeType: "application/json" };
+        }
+        const model = genAI.getGenerativeModel(modelOptions);
+        const result = await model.generateContent([
+          { text: systemPrompt },
+          { text: userPrompt }
+        ]);
+        return result.response.text();
+      } catch (err) {
+        console.warn(`⚠️  Gemini API call failed: ${err.message}. Trying Groq fallback...`);
+      }
     }
-  });
+
+    const groqApiKey = process.env.GROQ_API_KEY;
+    const groqModel = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+    
+    if (groqApiKey) {
+      const maxRetries = 3;
+      let attempt = 0;
+      while (attempt < maxRetries) {
+        try {
+          const body = {
+            model: groqModel,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
+            ],
+            temperature: 0.2
+          };
+          if (jsonMode) {
+            body.response_format = { type: "json_object" };
+          }
+          
+          const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${groqApiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(body)
+          });
+          
+          if (res.status === 429) {
+            const resText = await res.text();
+            attempt++;
+            if (attempt >= maxRetries) {
+              throw new Error(`HTTP 429 - ${resText}`);
+            }
+            let waitMs = 5000;
+            const match = resText.match(/try again in ([\d.]+)s/i);
+            if (match) {
+              waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000;
+            }
+            console.warn(`⚠️  Groq rate limited (429). Retrying attempt ${attempt}/${maxRetries} in ${waitMs / 1000}s...`);
+            await sleep(waitMs);
+            continue;
+          }
+
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status} - ${await res.text()}`);
+          }
+          
+          const data = await res.json();
+          const content = data.choices[0].message.content;
+          return typeof content === 'string' ? content.trim() : content;
+        } catch (err) {
+          attempt++;
+          if (attempt >= maxRetries) {
+            console.error(`❌  Groq API call failed after ${maxRetries} attempts: ${err.message}`);
+            throw err;
+          }
+          console.warn(`⚠️  Groq API error: ${err.message}. Retrying in 3s...`);
+          await sleep(3000);
+        }
+      }
+    }
+    
+    throw new Error("No LLM API (Gemini or Groq) is configured and succeeded.");
+  }
 
   try {
-    const result = await model.generateContent([
-      { text: rankSystemPrompt },
-      { text: `CANDIDATE RESUME:\n${cvContent}\n\nLIST OF JOBS TO RANK:\n${JSON.stringify(jobsForLlm, null, 2)}\n\n(IMPORTANT: Map each output job back to its original URL from the jobs list)` }
-    ]);
-    const responseText = result.response.text();
+    const userPrompt = `CANDIDATE RESUME:\n${cvContent}\n\nLIST OF JOBS TO RANK:\n${JSON.stringify(jobsForLlm, null, 2)}\n\n(IMPORTANT: Map each output job back to its original URL from the jobs list)`;
+    const responseText = await callLLM(rankSystemPrompt, userPrompt, true);
     
     // Parse the response to ensure it's valid JSON, then print it
     const rankedList = JSON.parse(responseText);

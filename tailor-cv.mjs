@@ -84,10 +84,104 @@ function nextReportNumber() {
   return String(Math.max(...files) + 1).padStart(3, '0');
 }
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function callLLM(systemPrompt, userPrompt, jsonMode = false) {
+  if (apiKey) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const modelOptions = { model: modelName };
+      if (jsonMode) {
+        modelOptions.generationConfig = { responseMimeType: "application/json" };
+      }
+      const model = genAI.getGenerativeModel(modelOptions);
+      const result = await model.generateContent([
+        { text: systemPrompt },
+        { text: userPrompt }
+      ]);
+      return result.response.text();
+    } catch (err) {
+      console.warn(`⚠️  Gemini API call failed: ${err.message}. Trying Groq fallback...`);
+    }
+  }
+
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const groqModel = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+  
+  if (groqApiKey) {
+    const maxRetries = 3;
+    let attempt = 0;
+    while (attempt < maxRetries) {
+      try {
+        const body = {
+          model: groqModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          temperature: 0.2
+        };
+        if (jsonMode) {
+          body.response_format = { type: "json_object" };
+        }
+        
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${groqApiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body)
+        });
+        
+        if (res.status === 429) {
+          const resText = await res.text();
+          attempt++;
+          if (attempt >= maxRetries) {
+            throw new Error(`HTTP 429 - ${resText}`);
+          }
+          let waitMs = 5000;
+          const match = resText.match(/try again in ([\d.]+)s/i);
+          if (match) {
+            waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000;
+          }
+          console.warn(`⚠️  Groq rate limited (429). Retrying attempt ${attempt}/${maxRetries} in ${waitMs / 1000}s...`);
+          await sleep(waitMs);
+          continue;
+        }
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} - ${await res.text()}`);
+        }
+        
+        const data = await res.json();
+        const content = data.choices[0].message.content;
+        return typeof content === 'string' ? content.trim() : content;
+      } catch (err) {
+        attempt++;
+        if (attempt >= maxRetries) {
+          console.error(`❌  Groq API call failed after ${maxRetries} attempts: ${err.message}`);
+          throw err;
+        }
+        console.warn(`⚠️  Groq API error: ${err.message}. Retrying in 3s...`);
+        await sleep(3000);
+      }
+    }
+  }
+  
+  throw new Error("No LLM API (Gemini or Groq) is configured and succeeded.");
+}
+
 (async () => {
   let finalReportId = null;
   let reportContent = '';
   let jdText = '';
+
+  let company = companyArg || 'unknown';
+  let role = roleArg || 'unknown';
+  let score = '3.0';
+  let archetype = 'unknown';
+  let legitimacy = 'unknown';
 
   // ── STEP 1: Get/Generate Job Description & Report ────────────────────────
   if (url) {
@@ -124,43 +218,76 @@ function nextReportNumber() {
       process.exit(1);
     }
 
-    // Call Gemini to get evaluation report
+    // Call LLM to get evaluation report
     const sharedContext  = readFile(PATHS.shared, 'modes/_shared.md');
     const ofertaLogic    = readFile(PATHS.oferta, 'modes/oferta.md');
     const cvContent      = readFile(PATHS.cv,     'cv.md');
+ 
+    const evalSystemPrompt = `You are career-ops, an AI-powered job search assistant.
+You evaluate job offers against the user's CV using a structured A-G scoring system.
 
-    const evalSystemPrompt = `You are career-ops. Evaluate job against CV. Output full report and SCORE_SUMMARY.`;
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
+Your evaluation methodology is defined below. Follow it exactly.
+
+═══════════════════════════════════════════════════════
+SYSTEM CONTEXT (_shared.md)
+═══════════════════════════════════════════════════════
+${sharedContext}
+
+═══════════════════════════════════════════════════════
+EVALUATION MODE (oferta.md)
+═══════════════════════════════════════════════════════
+${ofertaLogic}
+
+═══════════════════════════════════════════════════════
+CANDIDATE RESUME (cv.md)
+═══════════════════════════════════════════════════════
+${cvContent}
+
+═══════════════════════════════════════════════════════
+IMPORTANT OPERATING RULES FOR THIS CLI SESSION
+═══════════════════════════════════════════════════════
+1. You do NOT have access to WebSearch, Playwright, or file writing tools.
+   - For Block D (Comp research): provide salary estimates based on your training data, clearly noted as estimates.
+   - For Block G (Legitimacy): analyze the JD text only; skip URL/page freshness checks.
+   - Post-evaluation file saving is handled by the script, not by you.
+2. Generate Blocks A through G in full, in English, unless the JD is in another language.
+3. At the very end, output a machine-readable summary block in this exact format:
+
+---SCORE_SUMMARY---
+COMPANY: <company name or "Unknown">
+ROLE: <role title>
+SCORE: <global score as decimal, e.g. 3.8>
+ARCHETYPE: <detected archetype>
+LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
+---END_SUMMARY---
+`;
+    const evalUserPrompt = `\n\nJOB DESCRIPTION TO EVALUATE:\n\n${jdText}`;
     
     let evaluationText = '';
     try {
-      const result = await model.generateContent([
-        { text: evalSystemPrompt },
-        { text: `CANDIDATE RESUME:\n${cvContent}\n\nEVAL LOGIC:\n${sharedContext}\n${ofertaLogic}\n\nJOB DESCRIPTION:\n${jdText}` }
-      ]);
-      evaluationText = result.response.text();
+      evaluationText = await callLLM(evalSystemPrompt, evalUserPrompt, false);
     } catch (err) {
-      console.error('❌  Gemini evaluation failed:', err.message);
+      console.error('❌  Evaluation failed:', err.message);
       process.exit(1);
     }
 
     // Save report
     const summaryMatch = evaluationText.match(/---SCORE_SUMMARY---\s*([\s\S]*?)---END_SUMMARY---/);
-    let company = companyArg || 'unknown';
-    let role = roleArg || 'unknown';
-    let score = '3.0';
     if (summaryMatch) {
       const block = summaryMatch[1];
       const mC = block.match(/COMPANY:\s*(.+)/);
       const mR = block.match(/ROLE:\s*(.+)/);
       const mS = block.match(/SCORE:\s*(.+)/);
+      const mA = block.match(/ARCHETYPE:\s*(.+)/);
+      const mL = block.match(/LEGITIMACY:\s*(.+)/);
       company = companyArg || (mC ? mC[1].trim() : 'unknown');
       role = roleArg || (mR ? mR[1].trim() : 'unknown');
       score = mS ? mS[1].trim() : '3.0';
+      archetype = mA ? mA[1].trim() : 'unknown';
+      legitimacy = mL ? mL[1].trim() : 'unknown';
     }
 
-    const num = nextReportNumber();
+    const num = reportId ? String(reportId).padStart(3, '0') : nextReportNumber();
     finalReportId = parseInt(num);
     const today = new Date().toISOString().split('T')[0];
     const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -168,10 +295,17 @@ function nextReportNumber() {
     const reportPath = join(PATHS.reports, filename);
 
     reportContent = `# Evaluation: ${company} — ${role}
-Score: ${score}/5
-Date: ${today}
 
-${evaluationText}`;
+**Date:** ${today}
+**Archetype:** ${archetype}
+**Score:** ${score}/5
+**Legitimacy:** ${legitimacy}
+**PDF:** pending
+**Tool:** Gemini (${modelName})
+
+---
+
+${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').trim()}`;
 
     writeFileSync(reportPath, reportContent, 'utf-8');
   } else if (reportId) {
@@ -185,6 +319,25 @@ ${evaluationText}`;
       process.exit(1);
     }
     reportContent = readFile(join(PATHS.reports, filename), `reports/${filename}`);
+
+    // Parse metadata from headers
+    const titleMatch = reportContent.match(/^#\s*(?:Evaluation|Evaluación)[:\s]+(.*?)\s+(?:—|--|-)\s+(.*)$/m);
+    if (titleMatch) {
+      company = titleMatch[1].trim();
+      role = titleMatch[2].trim();
+    }
+    const scoreMatch = reportContent.match(/\*\*Score:\*\*\s*(.+?)\/5/i) || reportContent.match(/Score:\s*(.+?)\/5/i);
+    if (scoreMatch) {
+      score = scoreMatch[1].trim();
+    }
+    const archetypeMatch = reportContent.match(/\*\*Archetype:\*\*\s*(.+)/i) || reportContent.match(/Arquetipo:\s*(.+)/i) || reportContent.match(/\*\*Arquetipo:\*\*\s*(.+)/i);
+    if (archetypeMatch) {
+      archetype = archetypeMatch[1].trim();
+    }
+    const legitimacyMatch = reportContent.match(/\*\*Legitimacy:\*\*\s*(.+)/i) || reportContent.match(/Legitimacy:\s*(.+)/i) || reportContent.match(/\*\*Legitimidad:\*\*\s*(.+)/i) || reportContent.match(/Legitimidad:\s*(.+)/i);
+    if (legitimacyMatch) {
+      legitimacy = legitimacyMatch[1].trim();
+    }
   } else {
     console.error('❌  Error: Either --url or --report-id is required.');
     process.exit(1);
@@ -260,43 +413,45 @@ The JSON object must contain the following keys representing HTML CV segments:
   </div>
 `;
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: modelName,
-    generationConfig: {
-      responseMimeType: "application/json"
-    }
-  });
-
   let tailoredData = {};
   try {
-    const result = await model.generateContent([
-      { text: tailorSystemPrompt },
-      { text: `CANDIDATE GENERAL CV:\n${cvContent}\n\nTAILORING METHODOLOGY (pdf.md):\n${pdfModeLogic}\n\nEVALUATION REPORT/JD CONTEXT:\n${reportContent}` }
-    ]);
-    const responseText = result.response.text();
+    const responseText = await callLLM(tailorSystemPrompt, `CANDIDATE GENERAL CV:\n${cvContent}\n\nTAILORING METHODOLOGY (pdf.md):\n${pdfModeLogic}\n\nEVALUATION REPORT/JD CONTEXT:\n${reportContent}`, true);
     tailoredData = JSON.parse(responseText);
   } catch (err) {
-    console.error('❌  Gemini tailoring call or JSON parsing failed:', err.message);
+    console.error('❌  Tailoring call or JSON parsing failed:', err.message);
     process.exit(1);
   }
 
   // ── STEP 4: Render Template HTML ──────────────────────────────────────────
   let templateHtml = readFile(PATHS.template, 'cv-template.html');
 
-  // Fill personal profile values
+  const candidate = profile.candidate || {};
+
+  let linkedinUrl = candidate.linkedin || '';
+  if (linkedinUrl && !linkedinUrl.startsWith('http')) {
+    linkedinUrl = 'https://' + linkedinUrl;
+  }
+  let linkedinDisplay = candidate.linkedin || '';
+
+  let portfolioUrl = candidate.portfolio_url || '';
+  if (portfolioUrl && !portfolioUrl.startsWith('http')) {
+    portfolioUrl = 'https://' + portfolioUrl;
+  }
+  let portfolioDisplay = candidate.portfolio_url || '';
+
   templateHtml = templateHtml
-    .replace(/{{NAME}}/g, profile.name || '')
-    .replace(/{{EMAIL}}/g, profile.email || '')
-    .replace(/{{LOCATION}}/g, profile.location || '')
-    .replace(/{{LINKEDIN_URL}}/g, profile.linkedin?.url || '')
-    .replace(/{{LINKEDIN_DISPLAY}}/g, profile.linkedin?.display || '')
-    .replace(/{{PORTFOLIO_URL}}/g, profile.portfolio?.url || '')
-    .replace(/{{PORTFOLIO_DISPLAY}}/g, profile.portfolio?.display || '');
+    .replace(/{{NAME}}/g, candidate.full_name || '')
+    .replace(/{{EMAIL}}/g, candidate.email || '')
+    .replace(/{{LOCATION}}/g, candidate.location || '')
+    .replace(/{{LINKEDIN_URL}}/g, linkedinUrl)
+    .replace(/{{LINKEDIN_DISPLAY}}/g, linkedinDisplay)
+    .replace(/{{PORTFOLIO_URL}}/g, portfolioUrl)
+    .replace(/{{PORTFOLIO_DISPLAY}}/g, portfolioDisplay);
 
   // Handle phone and its separator cleanly
-  if (profile.phone) {
-    templateHtml = templateHtml.replace(/{{PHONE}}/g, profile.phone);
+  const phone = candidate.phone || '';
+  if (phone) {
+    templateHtml = templateHtml.replace(/{{PHONE}}/g, phone);
   } else {
     // Remove the phone placeholder span and the trailing separator
     templateHtml = templateHtml
@@ -388,7 +543,12 @@ The JSON object must contain the following keys representing HTML CV segments:
   console.log('\n---JSON_SUMMARY---');
   console.log(JSON.stringify({
     report_id: finalReportId,
-    pdf_path: finalPdfPath
+    pdf_path: finalPdfPath,
+    company: company,
+    role: role,
+    score: score,
+    archetype: archetype,
+    legitimacy: legitimacy
   }, null, 2));
   console.log('---END_JSON_SUMMARY---');
 })();

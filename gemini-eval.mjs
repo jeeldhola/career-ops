@@ -90,6 +90,7 @@ let jdText = '';
 let modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 let saveReport = true;
 let metadataFile = '';
+let reportId = '';
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--file' && args[i + 1]) {
@@ -103,6 +104,8 @@ for (let i = 0; i < args.length; i++) {
     modelName = args[++i];
   } else if (args[i] === '--metadata-file' && args[i + 1]) {
     metadataFile = args[++i];
+  } else if (args[i] === '--report-id' && args[i + 1]) {
+    reportId = args[++i];
   } else if (args[i] === '--no-save') {
     saveReport = false;
   } else if (!args[i].startsWith('--')) {
@@ -212,47 +215,132 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 ---END_SUMMARY---
 `;
 
-// ---------------------------------------------------------------------------
-// Call Gemini API
-// ---------------------------------------------------------------------------
-console.log(`🤖  Calling Gemini (${modelName})... this may take 30-60 seconds.\n`);
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({
-  model: modelName,
-  generationConfig: {
-    temperature: 0.4,      // deterministic enough for structured evaluation
-    maxOutputTokens: 8192, // full 7-block evaluation
-  },
-});
+async function callLLM(systemPrompt, userPrompt, metadataFile = '') {
+  if (apiKey) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 8192,
+        },
+      });
+      const result = await model.generateContent([
+        { text: systemPrompt },
+        { text: userPrompt }
+      ]);
+      const evaluationText = result.response.text();
+      const usage = result.response.usageMetadata;
+      if (metadataFile && usage) {
+        try {
+          const usageJson = {
+            prompt_tokens: usage.promptTokenCount || 0,
+            completion_tokens: usage.candidatesTokenCount || 0,
+            total_tokens: usage.totalTokenCount || 0
+          };
+          writeFileSync(metadataFile, JSON.stringify(usageJson, null, 2), 'utf-8');
+        } catch (err) {
+          console.warn(`⚠️  Could not write metadata file: ${err.message}`);
+        }
+      }
+      return evaluationText;
+    } catch (err) {
+      console.warn(`⚠️  Gemini API call failed: ${err.message}. Trying Groq fallback...`);
+    }
+  }
+
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const groqModel = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+  
+  if (groqApiKey) {
+    const maxRetries = 3;
+    let attempt = 0;
+    while (attempt < maxRetries) {
+      try {
+        const body = {
+          model: groqModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          temperature: 0.4,
+          max_tokens: 8000
+        };
+        
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${groqApiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body)
+        });
+        
+        if (res.status === 429) {
+          const resText = await res.text();
+          attempt++;
+          if (attempt >= maxRetries) {
+            throw new Error(`HTTP 429 - ${resText}`);
+          }
+          let waitMs = 5000;
+          const match = resText.match(/try again in ([\d.]+)s/i);
+          if (match) {
+            waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000;
+          }
+          console.warn(`⚠️  Groq rate limited (429). Retrying attempt ${attempt}/${maxRetries} in ${waitMs / 1000}s...`);
+          await sleep(waitMs);
+          continue;
+        }
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} - ${await res.text()}`);
+        }
+        
+        const data = await res.json();
+        const content = data.choices[0].message.content;
+        
+        if (metadataFile && data.usage) {
+          try {
+            const usageJson = {
+              prompt_tokens: data.usage.prompt_tokens || 0,
+              completion_tokens: data.usage.completion_tokens || 0,
+              total_tokens: data.usage.total_tokens || 0
+            };
+            writeFileSync(metadataFile, JSON.stringify(usageJson, null, 2), 'utf-8');
+          } catch (err) {
+            // ignore
+          }
+        }
+        
+        return typeof content === 'string' ? content.trim() : content;
+      } catch (err) {
+        attempt++;
+        if (attempt >= maxRetries) {
+          console.error(`❌  Groq API call failed after ${maxRetries} attempts: ${err.message}`);
+          throw err;
+        }
+        console.warn(`⚠️  Groq API error: ${err.message}. Retrying in 3s...`);
+        await sleep(3000);
+      }
+    }
+  }
+  
+  throw new Error("No LLM API (Gemini or Groq) is configured and succeeded.");
+}
+
+// ---------------------------------------------------------------------------
+// Call LLM API
+// ---------------------------------------------------------------------------
+console.log(`🤖  Calling LLM API (${modelName})... this may take 30-60 seconds.\n`);
 
 let evaluationText;
 try {
-  const result = await model.generateContent([
-    { text: systemPrompt },
-    { text: `\n\nJOB DESCRIPTION TO EVALUATE:\n\n${jdText}` },
-  ]);
-  evaluationText = result.response.text();
-  const usage = result.response.usageMetadata;
-  if (metadataFile && usage) {
-    try {
-      const usageJson = {
-        prompt_tokens: usage.promptTokenCount || 0,
-        completion_tokens: usage.candidatesTokenCount || 0,
-        total_tokens: usage.totalTokenCount || 0
-      };
-      writeFileSync(metadataFile, JSON.stringify(usageJson, null, 2), 'utf-8');
-    } catch (err) {
-      console.warn(`⚠️  Could not write metadata file: ${err.message}`);
-    }
-  }
+  evaluationText = await callLLM(systemPrompt, `\n\nJOB DESCRIPTION TO EVALUATE:\n\n${jdText}`, metadataFile);
 } catch (err) {
-  console.error('❌  Gemini API error:', err.message);
-  if (err.message?.includes('API_KEY')) {
-    console.error('    Check your GEMINI_API_KEY in .env');
-  } else if (err.message?.includes('quota') || err.message?.includes('rate')) {
-    console.error('    You may have hit the free-tier rate limit. Wait 60s and retry.');
-  }
+  console.error('❌  Evaluation API error:', err.message);
   process.exit(1);
 }
 
@@ -299,7 +387,7 @@ if (saveReport) {
       mkdirSync(PATHS.reports, { recursive: true });
     }
 
-    const num         = nextReportNumber();
+    const num         = reportId ? String(reportId).padStart(3, '0') : nextReportNumber();
     const today       = new Date().toISOString().split('T')[0];
     const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const filename    = `${num}-${companySlug}-${today}.md`;
