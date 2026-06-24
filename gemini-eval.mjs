@@ -204,7 +204,11 @@ IMPORTANT OPERATING RULES FOR THIS CLI SESSION
    - For Block G (Legitimacy): analyze the JD text only; skip URL/page freshness checks.
    - Post-evaluation file saving is handled by the script, not by you.
 2. Generate Blocks A through G in full, in English, unless the JD is in another language.
-3. At the very end, output a machine-readable summary block in this exact format:
+3. Keep the output ultra-concise, brief, and direct-to-the-point.
+   - Limit the entire report to under 300 words total.
+   - Absolutely NO tables or verbose paragraphs. Use only short bullet points and single-sentence answers.
+   - Follow the structure defined in oferta.md exactly.
+4. At the very end, output a machine-readable summary block in this exact format:
 
 ---SCORE_SUMMARY---
 COMPANY: <company name or "Unknown">
@@ -345,14 +349,6 @@ try {
 }
 
 // ---------------------------------------------------------------------------
-// Display evaluation
-// ---------------------------------------------------------------------------
-console.log('\n' + '═'.repeat(66));
-console.log('  CAREER-OPS EVALUATION — powered by Google Gemini');
-console.log('═'.repeat(66) + '\n');
-console.log(evaluationText);
-
-// ---------------------------------------------------------------------------
 // Parse score summary
 // ---------------------------------------------------------------------------
 const summaryMatch = evaluationText.match(
@@ -379,21 +375,22 @@ if (summaryMatch) {
 }
 
 // ---------------------------------------------------------------------------
-// Save report
+// Format and Display evaluation
 // ---------------------------------------------------------------------------
-if (saveReport) {
-  try {
-    if (!existsSync(PATHS.reports)) {
-      mkdirSync(PATHS.reports, { recursive: true });
-    }
+const today = new Date().toISOString().split('T')[0];
+const cleanedText = evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').trim();
+let finalBody = cleanedText;
+const firstHeaderIdx = cleanedText.indexOf('## ');
+if (firstHeaderIdx !== -1) {
+  finalBody = cleanedText.slice(firstHeaderIdx).trim();
+} else {
+  const firstHeaderIdx2 = cleanedText.indexOf('##');
+  if (firstHeaderIdx2 !== -1) {
+    finalBody = cleanedText.slice(firstHeaderIdx2).trim();
+  }
+}
 
-    const num = reportId ? String(reportId).padStart(3, '0') : nextReportNumber();
-    const today = new Date().toISOString().split('T')[0];
-    const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const filename = `${num}-${companySlug}-${today}.md`;
-    const reportPath = join(PATHS.reports, filename);
-
-    const reportContent = `# Evaluation: ${company} — ${role}
+const reportContent = `# Evaluation: ${company} — ${role}
 
 **Date:** ${today}
 **Archetype:** ${archetype}
@@ -404,8 +401,27 @@ if (saveReport) {
 
 ---
 
-${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').trim()}
+${finalBody}
 `;
+
+console.log('\n' + '═'.repeat(66));
+console.log('  CAREER-OPS EVALUATION — powered by Google Gemini');
+console.log('═'.repeat(66) + '\n');
+console.log(reportContent);
+
+// ---------------------------------------------------------------------------
+// Save report
+// ---------------------------------------------------------------------------
+if (saveReport) {
+  try {
+    if (!existsSync(PATHS.reports)) {
+      mkdirSync(PATHS.reports, { recursive: true });
+    }
+
+    const num = reportId ? String(reportId).padStart(3, '0') : nextReportNumber();
+    const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const filename = `${num}-${companySlug}-${today}.md`;
+    const reportPath = join(PATHS.reports, filename);
 
     writeFileSync(reportPath, reportContent, 'utf-8');
     console.log(`\n✅  Report saved: reports/${filename}`);

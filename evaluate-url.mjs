@@ -175,7 +175,11 @@ IMPORTANT OPERATING RULES FOR THIS CLI SESSION
    - For Block G (Legitimacy): analyze the JD text only; skip URL/page freshness checks.
    - Post-evaluation file saving is handled by the script, not by you.
 2. Generate Blocks A through G in full, in English, unless the JD is in another language.
-3. At the very end, output a machine-readable summary block in this exact format:
+3. Keep the output ultra-concise, brief, and direct-to-the-point.
+   - Limit the entire report to under 300 words total.
+   - Absolutely NO tables or verbose paragraphs. Use only short bullet points and single-sentence answers.
+   - Follow the structure defined in oferta.md exactly.
+4. At the very end, output a machine-readable summary block in this exact format:
 
 ---SCORE_SUMMARY---
 COMPANY: <company name or "Unknown">
@@ -335,6 +339,7 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
   // 6. Save markdown report to reports/
   let filename = '';
   let num = '001';
+  let reportContent = '';
   try {
     if (!existsSync(PATHS.reports)) {
       mkdirSync(PATHS.reports, { recursive: true });
@@ -346,18 +351,31 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
     filename = `${num}-${companySlug}-${today}.md`;
     const reportPath = join(PATHS.reports, filename);
 
-    const reportContent = `# Evaluation: ${company} — ${role}
+    const cleanedText = evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').trim();
+    let finalBody = cleanedText;
+    const firstHeaderIdx = cleanedText.indexOf('## ');
+    if (firstHeaderIdx !== -1) {
+      finalBody = cleanedText.slice(firstHeaderIdx).trim();
+    } else {
+      const firstHeaderIdx2 = cleanedText.indexOf('##');
+      if (firstHeaderIdx2 !== -1) {
+        finalBody = cleanedText.slice(firstHeaderIdx2).trim();
+      }
+    }
+
+    reportContent = `# Evaluation: ${company} — ${role}
 
 **Date:** ${today}
 **Archetype:** ${archetype}
 **Score:** ${score}/5
 **Legitimacy:** ${legitimacy}
 **PDF:** pending
+**URL:** ${url}
 **Tool:** Gemini (${modelName})
 
 ---
 
-${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').trim()}
+${finalBody}
 `;
 
     writeFileSync(reportPath, reportContent, 'utf-8');
@@ -365,10 +383,8 @@ ${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').tri
     console.error(`⚠️  Could not save report: ${err.message}`);
   }
 
-
-
   // 8. Output full evaluation and final JSON summary block
-  console.log(evaluationText);
+  console.log(reportContent || evaluationText);
   console.log('\n---JSON_SUMMARY---');
   console.log(JSON.stringify({
     report_id: parseInt(num) || 0,

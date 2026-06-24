@@ -294,6 +294,18 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
     const filename = `${num}-${companySlug}-${today}.md`;
     const reportPath = join(PATHS.reports, filename);
 
+    const cleanedText = evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').trim();
+    let finalBody = cleanedText;
+    const firstHeaderIdx = cleanedText.indexOf('## ');
+    if (firstHeaderIdx !== -1) {
+      finalBody = cleanedText.slice(firstHeaderIdx).trim();
+    } else {
+      const firstHeaderIdx2 = cleanedText.indexOf('##');
+      if (firstHeaderIdx2 !== -1) {
+        finalBody = cleanedText.slice(firstHeaderIdx2).trim();
+      }
+    }
+
     reportContent = `# Evaluation: ${company} — ${role}
 
 **Date:** ${today}
@@ -305,7 +317,7 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 
 ---
 
-${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').trim()}`;
+${finalBody}`;
 
     writeFileSync(reportPath, reportContent, 'utf-8');
   } else if (reportId) {
