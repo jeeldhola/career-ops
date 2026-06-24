@@ -26,13 +26,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
 const PATHS = {
-  shared:       join(ROOT, 'modes', '_shared.md'),
-  oferta:       join(ROOT, 'modes', 'oferta.md'),
-  pdfMode:      join(ROOT, 'modes', 'pdf.md'),
-  cv:           join(ROOT, 'cv.md'),
-  reports:      join(ROOT, 'reports'),
-  profile:      join(ROOT, 'config', 'profile.yml'),
-  template:     join(ROOT, 'templates', 'cv-template.html'),
+  shared: join(ROOT, 'modes', '_shared.md'),
+  oferta: join(ROOT, 'modes', 'oferta.md'),
+  pdfMode: join(ROOT, 'modes', 'pdf.md'),
+  cv: join(ROOT, 'cv.md'),
+  reports: join(ROOT, 'reports'),
+  profile: join(ROOT, 'config', 'profile.yml'),
+  template: join(ROOT, 'templates', 'cv-template.html'),
 };
 
 const args = process.argv.slice(2);
@@ -40,7 +40,7 @@ let url = '';
 let companyArg = '';
 let roleArg = '';
 let reportId = '';
-let modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+let modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--url' && args[i + 1]) {
@@ -57,7 +57,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (modelName === 'gemini-2.5-flash') {
-  modelName = 'gemini-2.0-flash';
+  modelName = 'gemini-2.5-flash';
 }
 
 const apiKey = process.env.GEMINI_API_KEY;
@@ -107,7 +107,7 @@ async function callLLM(systemPrompt, userPrompt, jsonMode = false) {
 
   const groqApiKey = process.env.GROQ_API_KEY;
   const groqModel = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
-  
+
   if (groqApiKey) {
     const maxRetries = 3;
     let attempt = 0;
@@ -124,7 +124,7 @@ async function callLLM(systemPrompt, userPrompt, jsonMode = false) {
         if (jsonMode) {
           body.response_format = { type: "json_object" };
         }
-        
+
         const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -133,7 +133,7 @@ async function callLLM(systemPrompt, userPrompt, jsonMode = false) {
           },
           body: JSON.stringify(body)
         });
-        
+
         if (res.status === 429) {
           const resText = await res.text();
           attempt++;
@@ -153,7 +153,7 @@ async function callLLM(systemPrompt, userPrompt, jsonMode = false) {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status} - ${await res.text()}`);
         }
-        
+
         const data = await res.json();
         const content = data.choices[0].message.content;
         return typeof content === 'string' ? content.trim() : content;
@@ -168,7 +168,7 @@ async function callLLM(systemPrompt, userPrompt, jsonMode = false) {
       }
     }
   }
-  
+
   throw new Error("No LLM API (Gemini or Groq) is configured and succeeded.");
 }
 
@@ -207,7 +207,7 @@ async function callLLM(systemPrompt, userPrompt, jsonMode = false) {
     } catch (err) {
       console.error(`Scrape failed: ${err.message}`);
       if (browser) {
-        try { await browser.close(); } catch (_) {}
+        try { await browser.close(); } catch (_) { }
       }
       process.exit(1);
     }
@@ -219,10 +219,10 @@ async function callLLM(systemPrompt, userPrompt, jsonMode = false) {
     }
 
     // Call LLM to get evaluation report
-    const sharedContext  = readFile(PATHS.shared, 'modes/_shared.md');
-    const ofertaLogic    = readFile(PATHS.oferta, 'modes/oferta.md');
-    const cvContent      = readFile(PATHS.cv,     'cv.md');
- 
+    const sharedContext = readFile(PATHS.shared, 'modes/_shared.md');
+    const ofertaLogic = readFile(PATHS.oferta, 'modes/oferta.md');
+    const cvContent = readFile(PATHS.cv, 'cv.md');
+
     const evalSystemPrompt = `You are career-ops, an AI-powered job search assistant.
 You evaluate job offers against the user's CV using a structured A-G scoring system.
 
@@ -262,7 +262,7 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 ---END_SUMMARY---
 `;
     const evalUserPrompt = `\n\nJOB DESCRIPTION TO EVALUATE:\n\n${jdText}`;
-    
+
     let evaluationText = '';
     try {
       evaluationText = await callLLM(evalSystemPrompt, evalUserPrompt, false);
@@ -487,7 +487,7 @@ The JSON object must contain the following keys representing HTML CV segments:
   const prefix = String(finalReportId).padStart(3, '0');
   const files = readdirSync(PATHS.reports);
   const reportFilename = files.find(f => f.startsWith(prefix) && f.endsWith('.md'));
-  
+
   const pdfFilename = reportFilename.replace('.md', '.pdf');
   const tempHtmlPath = join(PATHS.reports, `temp-${prefix}.html`);
   const finalPdfPath = join(PATHS.reports, pdfFilename);
@@ -499,15 +499,15 @@ The JSON object must contain the following keys representing HTML CV segments:
   try {
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
-    
+
     // Set content and resolve relative assets locally
     await page.setContent(templateHtml, {
       waitUntil: 'networkidle',
       baseURL: `file://${PATHS.reports.replace(/\\/g, '/')}/`,
     });
-    
+
     await page.evaluate(() => document.fonts.ready);
-    
+
     const paperFormat = (tailoredData.PAGE_WIDTH || '').includes('8.5in') ? 'letter' : 'a4';
 
     await page.pdf({
@@ -522,22 +522,22 @@ The JSON object must contain the following keys representing HTML CV segments:
       },
       preferCSSPageSize: false,
     });
-    
+
     await browser.close();
     console.log(`✅ CV Tailored & Saved successfully.`);
   } catch (err) {
     console.error(`❌ Playwright PDF compile failed: ${err.message}`);
     if (browser) {
-      try { await browser.close(); } catch (_) {}
+      try { await browser.close(); } catch (_) { }
     }
-    try { unlinkSync(tempHtmlPath); } catch (_) {}
+    try { unlinkSync(tempHtmlPath); } catch (_) { }
     process.exit(1);
   }
 
   // Cleanup temporary HTML file
   try {
     unlinkSync(tempHtmlPath);
-  } catch (_) {}
+  } catch (_) { }
 
   // Output JSON Summary for python endpoints
   console.log('\n---JSON_SUMMARY---');

@@ -27,14 +27,14 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
 const PATHS = {
-  cv:      join(ROOT, 'cv.md'),
+  cv: join(ROOT, 'cv.md'),
   profile: join(ROOT, 'config', 'profile.yml'),
 };
 
 const args = process.argv.slice(2);
 let jobsFile = '';
 let top = 5;
-let modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+let modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--jobs-file' && args[i + 1]) {
@@ -47,7 +47,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (modelName === 'gemini-2.5-flash') {
-  modelName = 'gemini-2.0-flash';
+  modelName = 'gemini-2.5-flash';
 }
 
 if (!jobsFile) {
@@ -144,7 +144,7 @@ The JSON array should contain objects with this schema:
 
     const groqApiKey = process.env.GROQ_API_KEY;
     const groqModel = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
-    
+
     if (groqApiKey) {
       const maxRetries = 3;
       let attempt = 0;
@@ -161,7 +161,7 @@ The JSON array should contain objects with this schema:
           if (jsonMode) {
             body.response_format = { type: "json_object" };
           }
-          
+
           const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -170,7 +170,7 @@ The JSON array should contain objects with this schema:
             },
             body: JSON.stringify(body)
           });
-          
+
           if (res.status === 429) {
             const resText = await res.text();
             attempt++;
@@ -190,7 +190,7 @@ The JSON array should contain objects with this schema:
           if (!res.ok) {
             throw new Error(`HTTP ${res.status} - ${await res.text()}`);
           }
-          
+
           const data = await res.json();
           const content = data.choices[0].message.content;
           return typeof content === 'string' ? content.trim() : content;
@@ -205,25 +205,25 @@ The JSON array should contain objects with this schema:
         }
       }
     }
-    
+
     throw new Error("No LLM API (Gemini or Groq) is configured and succeeded.");
   }
 
   try {
     const userPrompt = `CANDIDATE RESUME:\n${cvContent}\n\nLIST OF JOBS TO RANK:\n${JSON.stringify(jobsForLlm, null, 2)}\n\n(IMPORTANT: Map each output job back to its original URL from the jobs list)`;
     const responseText = await callLLM(rankSystemPrompt, userPrompt, true);
-    
+
     // Parse the response to ensure it's valid JSON, then print it
     const rankedList = JSON.parse(responseText);
-    
+
     // Map URL back to the output list (since LLM matches by title/company)
     const finalRanked = rankedList.map((item, index) => {
       // Find matching job in rawJobs to get URL
-      const matchingJob = rawJobs.find(rj => 
+      const matchingJob = rawJobs.find(rj =>
         (rj.title || rj.role || '').toLowerCase() === item.title.toLowerCase() &&
         (rj.company || '').toLowerCase() === item.company.toLowerCase()
       ) || rawJobs[index] || {};
-      
+
       return {
         rank: item.rank || (index + 1),
         title: item.title,
@@ -236,7 +236,7 @@ The JSON array should contain objects with this schema:
         potential_gaps: item.potential_gaps || []
       };
     });
-    
+
     console.log(JSON.stringify(finalRanked, null, 2));
     process.exit(0);
   } catch (err) {

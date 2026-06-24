@@ -29,11 +29,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
 const PATHS = {
-  shared:   join(ROOT, 'modes', '_shared.md'),
-  oferta:   join(ROOT, 'modes', 'oferta.md'),
-  cv:       join(ROOT, 'cv.md'),
-  reports:  join(ROOT, 'reports'),
-  tracker:  join(ROOT, 'data', 'applications.md'),
+  shared: join(ROOT, 'modes', '_shared.md'),
+  oferta: join(ROOT, 'modes', 'oferta.md'),
+  cv: join(ROOT, 'cv.md'),
+  reports: join(ROOT, 'reports'),
+  tracker: join(ROOT, 'data', 'applications.md'),
 };
 
 // Parse command line arguments
@@ -41,7 +41,7 @@ const args = process.argv.slice(2);
 let url = '';
 let companyArg = '';
 let roleArg = '';
-let modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+let modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 let metadataFile = '';
 let reportId = '';
 
@@ -62,7 +62,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (modelName === 'gemini-2.5-flash') {
-  modelName = 'gemini-2.0-flash';
+  modelName = 'gemini-2.5-flash';
 }
 
 if (!url) {
@@ -97,7 +97,7 @@ function nextReportNumber() {
 (async () => {
   let browser;
   let jdText = '';
-  
+
   // 1. Scrape the URL
   try {
     browser = await chromium.launch({ headless: true });
@@ -105,10 +105,10 @@ function nextReportNumber() {
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     });
     const page = await context.newPage();
-    
+
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(3000);
-    
+
     jdText = await page.evaluate(() => {
       const selectorsToRemove = [
         'nav', 'header', 'footer', 'script', 'style', 'iframe', 'noscript',
@@ -121,16 +121,16 @@ function nextReportNumber() {
       });
       return doc.innerText || doc.textContent || '';
     });
-    
+
     if (!jdText || jdText.trim().length < 50) {
       jdText = await page.evaluate(() => document.body?.innerText ?? '');
     }
-    
+
     await browser.close();
   } catch (err) {
     console.error(`Scrape failed: ${err.message}`);
     if (browser) {
-      try { await browser.close(); } catch (_) {}
+      try { await browser.close(); } catch (_) { }
     }
     process.exit(1);
   }
@@ -142,9 +142,9 @@ function nextReportNumber() {
   }
 
   // 2. Load context files
-  const sharedContext  = readFile(PATHS.shared,   'modes/_shared.md');
-  const ofertaLogic    = readFile(PATHS.oferta,   'modes/oferta.md');
-  const cvContent      = readFile(PATHS.cv,       'cv.md');
+  const sharedContext = readFile(PATHS.shared, 'modes/_shared.md');
+  const ofertaLogic = readFile(PATHS.oferta, 'modes/oferta.md');
+  const cvContent = readFile(PATHS.cv, 'cv.md');
 
   // 3. Formulate the system prompt
   const systemPrompt = `You are career-ops, an AI-powered job search assistant.
@@ -225,7 +225,7 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 
     const groqApiKey = process.env.GROQ_API_KEY;
     const groqModel = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
-    
+
     if (groqApiKey) {
       const maxRetries = 3;
       let attempt = 0;
@@ -240,7 +240,7 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
             temperature: 0.4,
             max_tokens: 8000
           };
-          
+
           const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -249,7 +249,7 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
             },
             body: JSON.stringify(body)
           });
-          
+
           if (res.status === 429) {
             const resText = await res.text();
             attempt++;
@@ -269,10 +269,10 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
           if (!res.ok) {
             throw new Error(`HTTP ${res.status} - ${await res.text()}`);
           }
-          
+
           const data = await res.json();
           const content = data.choices[0].message.content;
-          
+
           if (metadataFile && data.usage) {
             try {
               const usageJson = {
@@ -285,7 +285,7 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
               // ignore
             }
           }
-          
+
           return typeof content === 'string' ? content.trim() : content;
         } catch (err) {
           attempt++;
@@ -298,7 +298,7 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
         }
       }
     }
-    
+
     throw new Error("No LLM API (Gemini or Groq) is configured and succeeded.");
   }
 
@@ -313,10 +313,10 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 
   // 5. Parse evaluation score summary
   const summaryMatch = evaluationText.match(/---SCORE_SUMMARY---\s*([\s\S]*?)---END_SUMMARY---/);
-  let company    = companyArg || 'unknown';
-  let role       = roleArg || 'unknown';
-  let score      = '?';
-  let archetype  = 'unknown';
+  let company = companyArg || 'unknown';
+  let role = roleArg || 'unknown';
+  let score = '?';
+  let archetype = 'unknown';
   let legitimacy = 'unknown';
 
   if (summaryMatch) {
@@ -325,10 +325,10 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
       const m = block.match(new RegExp(`${key}:\\s*(.+)`));
       return m ? m[1].trim() : 'unknown';
     };
-    company    = companyArg || extract('COMPANY');
-    role       = roleArg || extract('ROLE');
-    score      = extract('SCORE');
-    archetype  = extract('ARCHETYPE');
+    company = companyArg || extract('COMPANY');
+    role = roleArg || extract('ROLE');
+    score = extract('SCORE');
+    archetype = extract('ARCHETYPE');
     legitimacy = extract('LEGITIMACY');
   }
 
@@ -340,11 +340,11 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
       mkdirSync(PATHS.reports, { recursive: true });
     }
 
-    num               = reportId ? String(reportId).padStart(3, '0') : nextReportNumber();
-    const today       = new Date().toISOString().split('T')[0];
+    num = reportId ? String(reportId).padStart(3, '0') : nextReportNumber();
+    const today = new Date().toISOString().split('T')[0];
     const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    filename          = `${num}-${companySlug}-${today}.md`;
-    const reportPath  = join(PATHS.reports, filename);
+    filename = `${num}-${companySlug}-${today}.md`;
+    const reportPath = join(PATHS.reports, filename);
 
     const reportContent = `# Evaluation: ${company} — ${role}
 

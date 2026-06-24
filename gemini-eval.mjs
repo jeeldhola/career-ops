@@ -14,7 +14,7 @@
  * Requires:
  *   GEMINI_API_KEY in .env (or environment variable)
  *
- * Free-tier model: gemini-2.0-flash (generous quota, no billing required)
+ * Free-tier model: gemini-2.5-flash (generous quota, no billing required)
  */
 
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
@@ -40,13 +40,13 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 
 const PATHS = {
   // Primary evaluation logic lives in these two mode files
-  shared:   join(ROOT, 'modes', '_shared.md'),
-  oferta:   join(ROOT, 'modes', 'oferta.md'),
+  shared: join(ROOT, 'modes', '_shared.md'),
+  oferta: join(ROOT, 'modes', 'oferta.md'),
   // Canonical skill path referenced in Issue #344
   evaluate: join(ROOT, '.claude', 'skills', 'career-ops', 'SKILL.md'),
-  cv:       join(ROOT, 'cv.md'),
-  reports:  join(ROOT, 'reports'),
-  tracker:  join(ROOT, 'data', 'applications.md'),
+  cv: join(ROOT, 'cv.md'),
+  reports: join(ROOT, 'reports'),
+  tracker: join(ROOT, 'data', 'applications.md'),
 };
 
 // ---------------------------------------------------------------------------
@@ -65,11 +65,11 @@ if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
   USAGE
     node gemini-eval.mjs "<JD text>"
     node gemini-eval.mjs --file ./jds/my-job.txt
-    node gemini-eval.mjs --model gemini-2.0-flash "<JD text>"
+    node gemini-eval.mjs --model gemini-2.5-flash "<JD text>"
 
   OPTIONS
     --file <path>    Read JD from a file instead of inline text
-    --model <name>   Gemini model to use (default: gemini-2.0-flash)
+    --model <name>   Gemini model to use (default: gemini-2.5-flash)
     --no-save        Do not save report to reports/ directory
     --help           Show this help
 
@@ -87,7 +87,7 @@ if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
 
 // Parse flags
 let jdText = '';
-let modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+let modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 let saveReport = true;
 let metadataFile = '';
 let reportId = '';
@@ -169,9 +169,9 @@ if (!readdirSync) {
 // ---------------------------------------------------------------------------
 console.log('\n📂  Loading context files...');
 
-const sharedContext  = readFile(PATHS.shared,   'modes/_shared.md');
-const ofertaLogic    = readFile(PATHS.oferta,   'modes/oferta.md');
-const cvContent      = readFile(PATHS.cv,       'cv.md');
+const sharedContext = readFile(PATHS.shared, 'modes/_shared.md');
+const ofertaLogic = readFile(PATHS.oferta, 'modes/oferta.md');
+const cvContent = readFile(PATHS.cv, 'cv.md');
 
 // ---------------------------------------------------------------------------
 // Build the system prompt (mirrors the Claude skill router logic)
@@ -254,7 +254,7 @@ async function callLLM(systemPrompt, userPrompt, metadataFile = '') {
 
   const groqApiKey = process.env.GROQ_API_KEY;
   const groqModel = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
-  
+
   if (groqApiKey) {
     const maxRetries = 3;
     let attempt = 0;
@@ -269,7 +269,7 @@ async function callLLM(systemPrompt, userPrompt, metadataFile = '') {
           temperature: 0.4,
           max_tokens: 8000
         };
-        
+
         const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -278,7 +278,7 @@ async function callLLM(systemPrompt, userPrompt, metadataFile = '') {
           },
           body: JSON.stringify(body)
         });
-        
+
         if (res.status === 429) {
           const resText = await res.text();
           attempt++;
@@ -298,10 +298,10 @@ async function callLLM(systemPrompt, userPrompt, metadataFile = '') {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status} - ${await res.text()}`);
         }
-        
+
         const data = await res.json();
         const content = data.choices[0].message.content;
-        
+
         if (metadataFile && data.usage) {
           try {
             const usageJson = {
@@ -314,7 +314,7 @@ async function callLLM(systemPrompt, userPrompt, metadataFile = '') {
             // ignore
           }
         }
-        
+
         return typeof content === 'string' ? content.trim() : content;
       } catch (err) {
         attempt++;
@@ -327,7 +327,7 @@ async function callLLM(systemPrompt, userPrompt, metadataFile = '') {
       }
     }
   }
-  
+
   throw new Error("No LLM API (Gemini or Groq) is configured and succeeded.");
 }
 
@@ -359,10 +359,10 @@ const summaryMatch = evaluationText.match(
   /---SCORE_SUMMARY---\s*([\s\S]*?)---END_SUMMARY---/
 );
 
-let company    = 'unknown';
-let role       = 'unknown';
-let score      = '?';
-let archetype  = 'unknown';
+let company = 'unknown';
+let role = 'unknown';
+let score = '?';
+let archetype = 'unknown';
 let legitimacy = 'unknown';
 
 if (summaryMatch) {
@@ -371,10 +371,10 @@ if (summaryMatch) {
     const m = block.match(new RegExp(`${key}:\\s*(.+)`));
     return m ? m[1].trim() : 'unknown';
   };
-  company    = extract('COMPANY');
-  role       = extract('ROLE');
-  score      = extract('SCORE');
-  archetype  = extract('ARCHETYPE');
+  company = extract('COMPANY');
+  role = extract('ROLE');
+  score = extract('SCORE');
+  archetype = extract('ARCHETYPE');
   legitimacy = extract('LEGITIMACY');
 }
 
@@ -387,11 +387,11 @@ if (saveReport) {
       mkdirSync(PATHS.reports, { recursive: true });
     }
 
-    const num         = reportId ? String(reportId).padStart(3, '0') : nextReportNumber();
-    const today       = new Date().toISOString().split('T')[0];
+    const num = reportId ? String(reportId).padStart(3, '0') : nextReportNumber();
+    const today = new Date().toISOString().split('T')[0];
     const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const filename    = `${num}-${companySlug}-${today}.md`;
-    const reportPath  = join(PATHS.reports, filename);
+    const filename = `${num}-${companySlug}-${today}.md`;
+    const reportPath = join(PATHS.reports, filename);
 
     const reportContent = `# Evaluation: ${company} — ${role}
 
