@@ -41,6 +41,7 @@ let companyArg = '';
 let roleArg = '';
 let reportId = '';
 let modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+let defaultMode = false;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--url' && args[i + 1]) {
@@ -53,6 +54,8 @@ for (let i = 0; i < args.length; i++) {
     reportId = args[++i];
   } else if (args[i] === '--model' && args[i + 1]) {
     modelName = args[++i];
+  } else if (args[i] === '--default') {
+    defaultMode = true;
   }
 }
 
@@ -350,8 +353,15 @@ ${finalBody}`;
     if (legitimacyMatch) {
       legitimacy = legitimacyMatch[1].trim();
     }
+  } else if (defaultMode) {
+    company = "default";
+    role = "cv";
+    score = "5.0";
+    archetype = "default";
+    legitimacy = "High Confidence";
+    reportContent = "[NO JD CONTEXT - Generate default CV without changes, simply format the candidate's general CV into the requested JSON schema. Do not change any details, simply structure it into the requested sections.]";
   } else {
-    console.error('❌  Error: Either --url or --report-id is required.');
+    console.error('❌  Error: Either --url or --report-id or --default is required.');
     process.exit(1);
   }
 
@@ -496,13 +506,25 @@ The JSON object must contain the following keys representing HTML CV segments:
   );
 
   // ── STEP 5: Compile to PDF ───────────────────────────────────────────────
-  const prefix = String(finalReportId).padStart(3, '0');
-  const files = readdirSync(PATHS.reports);
-  const reportFilename = files.find(f => f.startsWith(prefix) && f.endsWith('.md'));
-
-  const pdfFilename = reportFilename.replace('.md', '.pdf');
-  const tempHtmlPath = join(PATHS.reports, `temp-${prefix}.html`);
-  const finalPdfPath = join(PATHS.reports, pdfFilename);
+  let pdfFilename;
+  let tempHtmlPath;
+  let finalPdfPath;
+  if (defaultMode) {
+    pdfFilename = 'default-cv.pdf';
+    tempHtmlPath = join(PATHS.reports, 'temp-default.html');
+    finalPdfPath = join(PATHS.reports, pdfFilename);
+  } else {
+    const prefix = String(finalReportId).padStart(3, '0');
+    const files = readdirSync(PATHS.reports);
+    const reportFilename = files.find(f => f.startsWith(prefix) && f.endsWith('.md'));
+    if (!reportFilename) {
+      console.error(`❌  Error: Report markdown file not found for prefix: ${prefix}`);
+      process.exit(1);
+    }
+    pdfFilename = reportFilename.replace('.md', '.pdf');
+    tempHtmlPath = join(PATHS.reports, `temp-${prefix}.html`);
+    finalPdfPath = join(PATHS.reports, pdfFilename);
+  }
 
   writeFileSync(tempHtmlPath, templateHtml, 'utf-8');
 
@@ -554,7 +576,7 @@ The JSON object must contain the following keys representing HTML CV segments:
   // Output JSON Summary for python endpoints
   console.log('\n---JSON_SUMMARY---');
   console.log(JSON.stringify({
-    report_id: finalReportId,
+    report_id: defaultMode ? 0 : finalReportId,
     pdf_path: finalPdfPath,
     company: company,
     role: role,
