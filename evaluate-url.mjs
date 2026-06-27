@@ -363,15 +363,16 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
       }
     }
 
-    reportContent = `# Evaluation: ${company} — ${role}
+    reportContent = `# ${company} — ${role}
 
-**Date:** ${today}
-**Archetype:** ${archetype}
-**Score:** ${score}/5
-**Legitimacy:** ${legitimacy}
-**PDF:** pending
-**URL:** ${url}
-**Tool:** Gemini (${modelName})
+- **Date:** ${today}
+- **Score:** ${score}/5
+- **Legitimacy:** ${legitimacy}
+- **PDF:** pending
+- **URL:** ${url}
+
+<!-- Archetype: ${archetype} -->
+<!-- Tool: Gemini (${modelName}) -->
 
 ---
 

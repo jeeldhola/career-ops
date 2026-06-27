@@ -309,14 +309,15 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
       }
     }
 
-    reportContent = `# Evaluation: ${company} — ${role}
+    reportContent = `# ${company} — ${role}
 
-**Date:** ${today}
-**Archetype:** ${archetype}
-**Score:** ${score}/5
-**Legitimacy:** ${legitimacy}
-**PDF:** pending
-**Tool:** Gemini (${modelName})
+- **Date:** ${today}
+- **Score:** ${score}/5
+- **Legitimacy:** ${legitimacy}
+- **PDF:** pending
+
+<!-- Archetype: ${archetype} -->
+<!-- Tool: Gemini (${modelName}) -->
 
 ---
 
@@ -341,15 +342,15 @@ ${finalBody}`;
       company = titleMatch[1].trim();
       role = titleMatch[2].trim();
     }
-    const scoreMatch = reportContent.match(/\*\*Score:\*\*\s*(.+?)\/5/i) || reportContent.match(/Score:\s*(.+?)\/5/i);
+    const scoreMatch = reportContent.match(/(?:\*\*Score:\*\*|Score:)\s*(.+?)\/5/i);
     if (scoreMatch) {
       score = scoreMatch[1].trim();
     }
-    const archetypeMatch = reportContent.match(/\*\*Archetype:\*\*\s*(.+)/i) || reportContent.match(/Arquetipo:\s*(.+)/i) || reportContent.match(/\*\*Arquetipo:\*\*\s*(.+)/i);
+    const archetypeMatch = reportContent.match(/(?:\*\*Archetype:\*\*|Archetype:)\s*(.+?)(?:\s*-->|\s*\n|$)/i) || reportContent.match(/(?:\*\*Arquetipo:\*\*|Arquetipo:)\s*(.+?)(?:\s*-->|\s*\n|$)/i);
     if (archetypeMatch) {
       archetype = archetypeMatch[1].trim();
     }
-    const legitimacyMatch = reportContent.match(/\*\*Legitimacy:\*\*\s*(.+)/i) || reportContent.match(/Legitimacy:\s*(.+)/i) || reportContent.match(/\*\*Legitimidad:\*\*\s*(.+)/i) || reportContent.match(/Legitimidad:\s*(.+)/i);
+    const legitimacyMatch = reportContent.match(/(?:\*\*Legitimacy:\*\*|Legitimacy:)\s*(.+?)(?:\s*-->|\s*\||\s*\n|$)/i) || reportContent.match(/(?:\*\*Legitimidad:\*\*|Legitimidad:)\s*(.+?)(?:\s*-->|\s*\||\s*\n|$)/i);
     if (legitimacyMatch) {
       legitimacy = legitimacyMatch[1].trim();
     }
@@ -385,14 +386,23 @@ ${finalBody}`;
 Your job is to tailor the candidate's cv.md to match the provided job description/evaluation report.
 Follow the rules in pdf.md exactly. Do not invent any experience, only adjust emphasis and language.
 
+CRITICAL ATS MATCHING INSTRUCTIONS:
+1. Target Role subtitle: Extract the exact job title from the job description/role configuration and output it in TARGET_ROLE.
+2. Keyword Injection: Identify the top 20-30 technical skills, methodologies, frameworks, databases, and tools in the job description. Cross-reference them with the candidate's true skills and experience. Weave these keywords naturally throughout the SUMMARY_TEXT, the EXPERIENCE bullet points, and the PROJECTS section.
+3. Acronyms & Long Forms: For key terms, include both acronyms and full-form versions (e.g., "Amazon Web Services (AWS)", "Natural Language Processing (NLP)", "Retrieval-Augmented Generation (RAG)", "Continuous Integration/Continuous Deployment (CI/CD)") to maximize parser matching.
+4. Experience Customization: In the EXPERIENCE HTML list, customize the first bullet point of each job experience to highlight the most relevant skills/technologies/methodologies for that role, using exact JD vocabulary where it matches the candidate's actual work.
+5. Competencies Density: Populate 12-16 high-density core competency tags under COMPETENCIES.
+6. Structured Technical Skills: Group technical skills under SKILLS into logical categories corresponding to the JD requirements (e.g., Languages, Frameworks, Cloud/Infra, Databases) and candidate qualifications.
+
 Output your response as a valid JSON object only. Do not wrap it in markdown block or any text.
 The JSON object must contain the following keys representing HTML CV segments:
 - LANG: either "en" or "es"
 - PAGE_WIDTH: "8.5in" (if company is in US/Canada) or "210mm" (else)
+- TARGET_ROLE: the target role title exactly matching the role/title from the job description
 - SECTION_SUMMARY: section title (e.g. "Professional Summary")
 - SUMMARY_TEXT: customized professional summary text rich in JD keywords
 - SECTION_COMPETENCIES: section title (e.g. "Core Competencies")
-- COMPETENCIES: HTML string of span tags, e.g. "<span class=\\"competency-tag\\">Keyword</span>" (6-8 tags)
+- COMPETENCIES: HTML string of span tags, e.g. "<span class=\\"competency-tag\\">Keyword</span>" (12-16 tags)
 - SECTION_EXPERIENCE: section title (e.g. "Work Experience")
 - EXPERIENCE: HTML string representing all work experiences. Each job is inside:
   <div class="job">
@@ -409,8 +419,11 @@ The JSON object must contain the following keys representing HTML CV segments:
 - PROJECTS: HTML string representing top 3-4 relevant projects:
   <div class="project">
     <div class="project-title">Project Name <span class="project-badge">Status/Type</span></div>
-    <div class="project-desc">Description...</div>
-    <div class="project-tech">Tech Stack...</div>
+    <ul>
+      <li>Bullet point 1...</li>
+      <li>Bullet point 2...</li>
+    </ul>
+    <div class="project-tech">Tech Stack (optional)...</div>
   </div>
 - SECTION_EDUCATION: section title
 - EDUCATION: HTML string of education items:
@@ -431,9 +444,11 @@ The JSON object must contain the following keys representing HTML CV segments:
 - SECTION_SKILLS: section title
 - SKILLS: HTML string of skills list:
   <div class="skills-grid">
-    <div class="skill-item"><span class="skill-category">Technical:</span> Skill 1, Skill 2</div>
+    <div class="skill-item"><span class="skill-category">Languages:</span> Skill 1, Skill 2</div>
+    <div class="skill-item"><span class="skill-category">Frameworks:</span> Skill 3, Skill 4</div>
   </div>
 `;
+
 
   let tailoredData = {};
   try {
@@ -453,37 +468,54 @@ The JSON object must contain the following keys representing HTML CV segments:
   if (linkedinUrl && !linkedinUrl.startsWith('http')) {
     linkedinUrl = 'https://' + linkedinUrl;
   }
-  let linkedinDisplay = candidate.linkedin || '';
+  const cleanDisplayUrl = (url) => {
+    if (!url) return '';
+    return url.replace(/^(https?:\/\/)?(www\.)?/, '').replace(/\/$/, '');
+  };
+  let linkedinDisplay = cleanDisplayUrl(candidate.linkedin);
 
-  let portfolioUrl = candidate.portfolio_url || '';
+  let portfolioUrl = candidate.portfolio_url || candidate.portfolio || '';
   if (portfolioUrl && !portfolioUrl.startsWith('http')) {
     portfolioUrl = 'https://' + portfolioUrl;
   }
-  let portfolioDisplay = candidate.portfolio_url || '';
+  let portfolioDisplay = cleanDisplayUrl(portfolioUrl);
+
+  let githubUrl = candidate.github || '';
+  if (githubUrl && !githubUrl.startsWith('http')) {
+    githubUrl = 'https://' + githubUrl;
+  }
+  let githubDisplay = cleanDisplayUrl(githubUrl);
 
   templateHtml = templateHtml
-    .replace(/{{NAME}}/g, candidate.full_name || '')
+    .replace(/{{NAME}}/g, candidate.full_name || candidate.fullName || '')
     .replace(/{{EMAIL}}/g, candidate.email || '')
     .replace(/{{LOCATION}}/g, candidate.location || '')
     .replace(/{{LINKEDIN_URL}}/g, linkedinUrl)
     .replace(/{{LINKEDIN_DISPLAY}}/g, linkedinDisplay)
+    .replace(/{{GITHUB_URL}}/g, githubUrl)
+    .replace(/{{GITHUB_DISPLAY}}/g, githubDisplay)
     .replace(/{{PORTFOLIO_URL}}/g, portfolioUrl)
     .replace(/{{PORTFOLIO_DISPLAY}}/g, portfolioDisplay);
 
-  // Handle phone and its separator cleanly
+  // Handle conditional spans (phone, github, portfolio)
   const phone = candidate.phone || '';
   if (phone) {
     templateHtml = templateHtml.replace(/{{PHONE}}/g, phone);
   } else {
-    // Remove the phone placeholder span and the trailing separator
-    templateHtml = templateHtml
-      .replace(/<span>{{PHONE}}<\/span>/g, '')
-      .replace(/<span class="separator">\|<\/span>/, '');
+    templateHtml = templateHtml.replace(/<span class="phone-span">[\s\S]*?<\/span>/g, '');
+  }
+
+  if (!githubUrl) {
+    templateHtml = templateHtml.replace(/<span class="github-span">[\s\S]*?<\/span>/g, '');
+  }
+
+  if (!portfolioUrl) {
+    templateHtml = templateHtml.replace(/<span class="portfolio-span">[\s\S]*?<\/span>/g, '');
   }
 
   // Fill tailored fields
   const placeholders = [
-    'LANG', 'PAGE_WIDTH', 'SECTION_SUMMARY', 'SUMMARY_TEXT',
+    'LANG', 'PAGE_WIDTH', 'TARGET_ROLE', 'SECTION_SUMMARY', 'SUMMARY_TEXT',
     'SECTION_COMPETENCIES', 'COMPETENCIES', 'SECTION_EXPERIENCE', 'EXPERIENCE',
     'SECTION_PROJECTS', 'PROJECTS', 'SECTION_EDUCATION', 'EDUCATION',
     'SECTION_CERTIFICATIONS', 'CERTIFICATIONS', 'SECTION_SKILLS', 'SKILLS'

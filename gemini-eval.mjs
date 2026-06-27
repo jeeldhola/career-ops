@@ -390,14 +390,15 @@ if (firstHeaderIdx !== -1) {
   }
 }
 
-const reportContent = `# Evaluation: ${company} — ${role}
+const reportContent = `# ${company} — ${role}
 
-**Date:** ${today}
-**Archetype:** ${archetype}
-**Score:** ${score}/5
-**Legitimacy:** ${legitimacy}
-**PDF:** pending
-**Tool:** Gemini (${modelName})
+- **Date:** ${today}
+- **Score:** ${score}/5
+- **Legitimacy:** ${legitimacy}
+- **PDF:** pending
+
+<!-- Archetype: ${archetype} -->
+<!-- Tool: Gemini (${modelName}) -->
 
 ---
 

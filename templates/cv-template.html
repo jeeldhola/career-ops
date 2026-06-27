@@ -80,34 +80,35 @@
     font-weight: 700;
     color: #1a1a2e;
     letter-spacing: -0.02em;
-    margin-bottom: 6px;
+    margin-bottom: 2px;
     line-height: 1.1;
   }
 
-  .header-gradient {
-    height: 2px;
-    background: linear-gradient(to right, hsl(187, 74%, 32%), hsl(270, 70%, 45%));
-    border-radius: 1px;
-    margin-bottom: 10px;
-  }
-
-  .contact-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 14px;
+  .contact-info {
     font-family: 'DM Sans', sans-serif;
-    font-size: 10.5px;
-    line-height: 1.4;
-    color: #555;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #333;
+    margin-top: 6px;
   }
 
-  .contact-row a {
-    color: #555;
+  .contact-info div {
+    margin-bottom: 2px;
+  }
+
+  .contact-info a {
+    color: #333;
     text-decoration: none;
   }
 
-  .contact-row .separator {
-    color: #ccc;
+  .contact-info a.email-link {
+    color: #1155cc;
+    text-decoration: underline;
+  }
+
+  .contact-info .separator {
+    margin: 0 4px;
+    color: #333;
   }
 
   /* === SECTIONS === */
@@ -121,7 +122,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: hsl(187, 74%, 32%);
+    color: #1a1a2e;
     border-bottom: 1.5px solid #e2e2e2;
     padding-bottom: 4px;
     margin-bottom: 10px;
@@ -151,11 +152,11 @@
     font-family: 'DM Sans', sans-serif;
     font-size: 10px;
     font-weight: 500;
-    color: hsl(187, 74%, 28%);
-    background: hsl(187, 40%, 95%);
+    color: #3f3f46;
+    background: #f4f4f5;
     padding: 4px 10px;
     border-radius: 3px;
-    border: 1px solid hsl(187, 40%, 88%);
+    border: 1px solid #e4e4e7;
   }
 
   /* === WORK EXPERIENCE === */
@@ -175,7 +176,7 @@
     font-family: 'Space Grotesk', sans-serif;
     font-size: 12.5px;
     font-weight: 600;
-    color: hsl(270, 70%, 45%);
+    color: #1a1a2e;
   }
 
   .job-period {
@@ -221,24 +222,29 @@
     font-family: 'Space Grotesk', sans-serif;
     font-size: 11.5px;
     font-weight: 600;
-    color: hsl(270, 70%, 45%);
+    color: #1a1a2e;
   }
 
   .project-badge {
     font-size: 9px;
     font-weight: 500;
-    color: hsl(187, 74%, 32%);
-    background: hsl(187, 40%, 95%);
+    color: #555;
+    background: #f4f4f5;
     padding: 1px 6px;
     border-radius: 2px;
     margin-left: 6px;
   }
 
-  .project-desc {
+  .project ul {
+    padding-left: 18px;
+    margin-top: 4px;
+  }
+
+  .project li {
     font-size: 10.5px;
-    color: #444;
-    margin-top: 3px;
-    line-height: 1.55;
+    line-height: 1.6;
+    color: #333;
+    margin-bottom: 4px;
   }
 
   .project-tech {
@@ -266,7 +272,7 @@
   }
 
   .edu-org {
-    color: hsl(270, 70%, 45%);
+    color: #1a1a2e;
     font-weight: 500;
   }
 
@@ -299,7 +305,7 @@
   }
 
   .cert-org {
-    color: hsl(270, 70%, 45%);
+    color: #1a1a2e;
   }
 
   .cert-year {
@@ -311,8 +317,8 @@
   /* === SKILLS === */
   .skills-grid {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px 14px;
+    flex-direction: column;
+    gap: 5px;
   }
 
   .skill-item {
@@ -355,17 +361,19 @@
   <!-- HEADER -->
   <div class="header avoid-break">
     <h1>{{NAME}}</h1>
-    <div class="header-gradient"></div>
-    <div class="contact-row">
-      <span>{{PHONE}}</span>
-      <span class="separator">|</span>
-      <span>{{EMAIL}}</span>
-      <span class="separator">|</span>
-      <a href="{{LINKEDIN_URL}}">{{LINKEDIN_DISPLAY}}</a>
-      <span class="separator">|</span>
-      <a href="{{PORTFOLIO_URL}}">{{PORTFOLIO_DISPLAY}}</a>
-      <span class="separator">|</span>
-      <span>{{LOCATION}}</span>
+    <div class="contact-info">
+      <div>
+        <span class="role-span"><span>{{TARGET_ROLE}}</span><span class="separator">·</span></span>
+        <span>{{LOCATION}}</span>
+        <span class="separator">·</span>
+        <a class="email-link" href="mailto:{{EMAIL}}">{{EMAIL}}</a>
+        <span class="phone-span"><span class="separator">|</span><span>{{PHONE}}</span></span>
+      </div>
+      <div>
+        <span class="linkedin-span"><a href="{{LINKEDIN_URL}}">{{LINKEDIN_DISPLAY}}</a></span>
+        <span class="github-span"><span class="separator">|</span><a href="{{GITHUB_URL}}">{{GITHUB_DISPLAY}}</a></span>
+        <span class="portfolio-span"><span class="separator">|</span><a href="{{PORTFOLIO_URL}}">{{PORTFOLIO_DISPLAY}}</a></span>
+      </div>
     </div>
   </div>
 
