@@ -292,6 +292,8 @@ async function main() {
   let totalFiltered = 0;
   let totalDupes = 0;
   const newOffers = [];
+  const allScannedJobs = [];
+  const successfullyScannedCompanies = [];
   const errors = [];
 
   const tasks = targets.map(company => async () => {
@@ -300,8 +302,22 @@ async function main() {
       const json = await fetchJson(url);
       const jobs = PARSERS[type](json, company.name);
       totalFound += jobs.length;
+      successfullyScannedCompanies.push(company.name);
 
       for (const job of jobs) {
+        allScannedJobs.push({
+          title: job.title,
+          company: job.company,
+          url: job.url,
+          location: job.location || '',
+          source: `${type}-api`,
+          description: job.description || '',
+          department: job.department || '',
+          workplace_type: job.workplace_type || '',
+          published_at: job.published_at || '',
+          date_found: date
+        });
+
         if (!titleFilter(job.title)) {
           totalFiltered++;
           continue;
@@ -328,10 +344,15 @@ async function main() {
   await parallelFetch(tasks, CONCURRENCY);
 
   // 5. Write results
-  if (!dryRun && newOffers.length > 0) {
-    appendToPipeline(newOffers);
-    appendToScanHistory(newOffers, date);
+  if (!dryRun) {
+    writeFileSync('data/all-scanned-jobs.json', JSON.stringify(allScannedJobs, null, 2), 'utf-8');
+    writeFileSync('data/scanned-companies.json', JSON.stringify(successfullyScannedCompanies, null, 2), 'utf-8');
+    if (newOffers.length > 0) {
+      appendToPipeline(newOffers);
+      appendToScanHistory(newOffers, date);
+    }
   }
+
 
   // 6. Print summary
   console.log(`\n${'━'.repeat(45)}`);
