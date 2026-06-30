@@ -74,6 +74,34 @@ function detectApi(company) {
 
 // ── API parsers ─────────────────────────────────────────────────────
 
+/**
+ * Strip HTML tags from a string and normalise whitespace.
+ * Used to convert API HTML descriptions into plain text for DB storage.
+ * Handles both normal HTML and HTML-entity-encoded HTML (e.g. Greenhouse).
+ */
+function stripHtml(html) {
+  if (!html) return '';
+  // First decode HTML entities so that &lt;div&gt; becomes <div> before stripping
+  let text = html
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  // Now strip actual HTML tags
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, 5000); // cap at 5k chars to keep DB rows lean
+}
+
 function parseGreenhouse(json, companyName) {
   const jobs = json.jobs || [];
   return jobs.map(j => ({
@@ -81,7 +109,45 @@ function parseGreenhouse(json, companyName) {
     url: j.absolute_url || '',
     company: companyName,
     location: j.location?.name || '',
+    // description & department are fetched separately via fetchGreenhouseDetails
+    description: stripHtml(j.content || ''),
+    department: j.departments?.[0]?.name || '',
+    _jobId: j.id,          // internal: used to fetch details
+    _boardSlug: null,      // filled in by caller
   }));
+}
+
+/**
+ * For a list of Greenhouse stub jobs, fetch the detail endpoint for each
+ * (which includes `content` and `departments`) using bounded parallelism.
+ * Mutates the jobs in-place: sets description and department.
+ */
+async function fetchGreenhouseDetails(jobs, boardSlug, concurrency = 5) {
+  // Only fetch details for jobs that don't already have a description
+  const needsDetail = jobs.filter(j => !j.description && j._jobId);
+  if (needsDetail.length === 0) return;
+
+  let i = 0;
+  async function worker() {
+    while (i < needsDetail.length) {
+      const job = needsDetail[i++];
+      try {
+        const detailUrl =
+          `https://boards-api.greenhouse.io/v1/boards/${boardSlug}/jobs/${job._jobId}`;
+        const detail = await fetchJson(detailUrl);
+        job.description = stripHtml(detail.content || '');
+        job.department = detail.departments?.[0]?.name || '';
+      } catch (_) {
+        // non-fatal: description stays empty for this job
+      }
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, needsDetail.length) },
+    () => worker()
+  );
+  await Promise.all(workers);
 }
 
 function parseAshby(json, companyName) {
@@ -91,6 +157,11 @@ function parseAshby(json, companyName) {
     url: j.jobUrl || '',
     company: companyName,
     location: j.location || '',
+    // Ashby returns HTML in descriptionHtml; plain text fallback if available
+    description: j.descriptionPlain
+      ? j.descriptionPlain.slice(0, 5000)
+      : stripHtml(j.descriptionHtml || ''),
+    department: j.department?.name || j.team?.name || '',
   }));
 }
 
@@ -101,6 +172,9 @@ function parseLever(json, companyName) {
     url: j.hostedUrl || '',
     company: companyName,
     location: j.categories?.location || '',
+    // Lever: description is plain-ish HTML; additional has extra sections
+    description: stripHtml((j.description || '') + '\n\n' + (j.additional || '')),
+    department: j.categories?.department || j.categories?.team || '',
   }));
 }
 
@@ -303,6 +377,18 @@ async function main() {
       const jobs = PARSERS[type](json, company.name);
       totalFound += jobs.length;
       successfullyScannedCompanies.push(company.name);
+
+      // Greenhouse: list endpoint omits content/departments — fetch individually
+      if (type === 'greenhouse') {
+        // Extract board slug from the API URL
+        // e.g. https://boards-api.greenhouse.io/v1/boards/anthropic/jobs → anthropic
+        const slugMatch = url.match(/\/boards\/([^/]+)\/jobs/);
+        const boardSlug = slugMatch ? slugMatch[1] : null;
+        if (boardSlug) {
+          console.log(`  → Fetching Greenhouse details for ${jobs.length} jobs at ${company.name} (board: ${boardSlug})...`);
+          await fetchGreenhouseDetails(jobs, boardSlug);
+        }
+      }
 
       for (const job of jobs) {
         allScannedJobs.push({

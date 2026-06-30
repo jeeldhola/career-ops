@@ -91,6 +91,8 @@ let modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 let saveReport = true;
 let metadataFile = '';
 let reportId = '';
+let companyArg = '';
+let roleArg = '';
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--file' && args[i + 1]) {
@@ -106,6 +108,10 @@ for (let i = 0; i < args.length; i++) {
     metadataFile = args[++i];
   } else if (args[i] === '--report-id' && args[i + 1]) {
     reportId = args[++i];
+  } else if (args[i] === '--company' && args[i + 1]) {
+    companyArg = args[++i];
+  } else if (args[i] === '--role' && args[i + 1]) {
+    roleArg = args[++i];
   } else if (args[i] === '--no-save') {
     saveReport = false;
   } else if (!args[i].startsWith('--')) {
@@ -165,13 +171,47 @@ if (!readdirSync) {
 }
 
 // ---------------------------------------------------------------------------
+// Prompt optimization helpers (saves tokens and boosts speed)
+// ---------------------------------------------------------------------------
+function pruneSharedContext(text) {
+  if (!text) return '';
+  // Remove HTML comments
+  text = text.replace(/<!--[\s\S]*?-->/g, '');
+  // Split by headings and keep only evaluation-related parts
+  const sections = text.split(/(?=## )/);
+  const kept = sections.filter(sec => {
+    const header = sec.trim().split('\n')[0].toLowerCase();
+    if (header.includes('global rules') || header.includes('professional writing') || header.includes('tools') || header.includes('sources of truth')) {
+      return false;
+    }
+    return true;
+  });
+  return kept.join('\n').trim();
+}
+
+function pruneOfertaLogic(text) {
+  if (!text) return '';
+  // Strip out post-evaluation / tracking instructions (LLM does not need to know this)
+  const idx = text.indexOf('## Post-evaluation');
+  if (idx !== -1) {
+    text = text.slice(0, idx);
+  }
+  return text.trim();
+}
+
+// ---------------------------------------------------------------------------
 // Load context files
 // ---------------------------------------------------------------------------
 console.log('\n📂  Loading context files...');
 
-const sharedContext = readFile(PATHS.shared, 'modes/_shared.md');
-const ofertaLogic = readFile(PATHS.oferta, 'modes/oferta.md');
+const rawShared = readFile(PATHS.shared, 'modes/_shared.md');
+const rawOferta = readFile(PATHS.oferta, 'modes/oferta.md');
 const cvContent = readFile(PATHS.cv, 'cv.md');
+
+// Prune context files dynamically for the LLM (preserving raw JD text as requested)
+const sharedContext = pruneSharedContext(rawShared);
+const ofertaLogic = pruneOfertaLogic(rawOferta);
+const optimizedJdText = jdText;
 
 // ---------------------------------------------------------------------------
 // Build the system prompt (mirrors the Claude skill router logic)
@@ -342,7 +382,7 @@ console.log(`🤖  Calling LLM API (${modelName})... this may take 30-60 seconds
 
 let evaluationText;
 try {
-  evaluationText = await callLLM(systemPrompt, `\n\nJOB DESCRIPTION TO EVALUATE:\n\n${jdText}`, metadataFile);
+  evaluationText = await callLLM(systemPrompt, `\n\nJOB DESCRIPTION TO EVALUATE:\n\n${optimizedJdText}`, metadataFile);
 } catch (err) {
   console.error('❌  Evaluation API error:', err.message);
   process.exit(1);
@@ -367,8 +407,9 @@ if (summaryMatch) {
     const m = block.match(new RegExp(`${key}:\\s*(.+)`));
     return m ? m[1].trim() : 'unknown';
   };
-  company = extract('COMPANY');
-  role = extract('ROLE');
+  // Prefer CLI-passed company/role hints over LLM-extracted ones
+  company = companyArg || extract('COMPANY');
+  role = roleArg || extract('ROLE');
   score = extract('SCORE');
   archetype = extract('ARCHETYPE');
   legitimacy = extract('LEGITIMACY');
