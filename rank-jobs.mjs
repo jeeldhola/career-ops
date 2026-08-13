@@ -229,6 +229,8 @@ The JSON array should contain objects with this schema:
         title: item.title,
         company: item.company,
         url: matchingJob.url || matchingJob.job_url || item.url || '',
+        date_found: matchingJob.date_found || item.date_found || '',
+        created_at: matchingJob.created_at || item.created_at || null,
         match_score: item.match_score || 3.5,
         match_reason: item.match_reason || 'Matched via CV query.',
         archetype: item.archetype || 'General',
