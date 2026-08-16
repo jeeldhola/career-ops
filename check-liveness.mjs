@@ -16,10 +16,11 @@
 
 import { chromium } from 'playwright';
 import { readFile } from 'fs/promises';
-import { classifyLiveness } from './liveness-core.mjs';
+import { classifyLiveness, assertSafeUrl } from './liveness-core.mjs';
 
 async function checkUrl(page, url) {
   try {
+    await assertSafeUrl(url);
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
 
     const status = response?.status() ?? 0;

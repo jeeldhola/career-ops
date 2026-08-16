@@ -1,3 +1,67 @@
+import { lookup } from 'dns/promises';
+
+// ---------------------------------------------------------------------------
+// SSRF guard — defense in depth for check-liveness.mjs's page.goto(url).
+// Chromium's page.goto() accepts file:// URLs and any host/port a plain http
+// client would, so an unvalidated URL here is a local-file-read + internal-
+// network SSRF vector. Resolving the hostname (not just pattern-matching it)
+// is what catches DNS rebinding — a hostname that looks public but resolves
+// to a private/loopback address is still rejected.
+// ---------------------------------------------------------------------------
+function isPrivateOrLoopbackIPv4(ip) {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) return true; // malformed — fail closed
+  const [a, b] = parts;
+  if (a === 127) return true; // loopback
+  if (a === 10) return true; // 10.0.0.0/8
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+  if (a === 192 && b === 168) return true; // 192.168.0.0/16
+  if (a === 169 && b === 254) return true; // 169.254.0.0/16 (link-local + cloud metadata)
+  if (a === 0) return true; // 0.0.0.0/8
+  return false;
+}
+
+function isPrivateOrLoopbackIPv6(ip) {
+  const lower = ip.toLowerCase();
+  if (lower === '::1') return true; // loopback
+  if (lower.startsWith('fe80:') || lower.startsWith('fe80::')) return true; // link-local
+  if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true; // fc00::/7 unique local
+  if (lower.startsWith('::ffff:')) {
+    // IPv4-mapped IPv6 — check the embedded IPv4 address too
+    const mapped = lower.split(':').pop();
+    if (mapped.includes('.')) return isPrivateOrLoopbackIPv4(mapped);
+  }
+  return false;
+}
+
+export async function assertSafeUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('Malformed URL.');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only http:// and https:// URLs are allowed.');
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === 'localhost' || hostname === 'metadata.google.internal') {
+    throw new Error('This hostname is not allowed.');
+  }
+  let resolved;
+  try {
+    resolved = await lookup(hostname, { all: true });
+  } catch {
+    throw new Error('Could not resolve hostname.');
+  }
+  for (const { address, family } of resolved) {
+    const unsafe = family === 6 ? isPrivateOrLoopbackIPv6(address) : isPrivateOrLoopbackIPv4(address);
+    if (unsafe) {
+      throw new Error('This URL resolves to a non-public address and cannot be checked.');
+    }
+  }
+}
+
 const HARD_EXPIRED_PATTERNS = [
   /job (is )?no longer available/i,
   /job.*no longer open/i,
